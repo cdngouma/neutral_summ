@@ -212,8 +212,8 @@ class AmazonDataset(Dataset):
         if refs_path:
             refs_dict = None
             
-        print(f"{duplicated} ({100*duplicated/n_elements:.2f}%) duplicated reviews added.")
-        print(f"{n_imbalanced} imbalanced batches found.")
+        # print(f"{duplicated} ({100*duplicated/n_elements:.2f}%) duplicated reviews added.")
+        # print(f"{n_imbalanced} imbalanced batches found.")
         
         return reviews_list, batch_idx_list, prod_id_list, refs_dict
 

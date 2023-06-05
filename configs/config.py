@@ -11,7 +11,7 @@ DATA_DIR = f"{ROOT_DIR}data/"
 
 follow = {
     "writer" : True,
-    "Name" : "__lm_run00.30-epochs.2docs.batch8.accum64.lr_1e-4.clip10.emb100.diff_embs200.gat200.1xcls_loss.full_data.v1",
+    "Name" : "__lm_run00",
     "write_rec_loss" : True,
     "write_total_loss" : True,
     "write_ROUGE" : True

@@ -13,11 +13,12 @@ class PossibleSolutions():
         self.log_probs = log_probs
         self.hidden = hidden
         
-    def extend(self, token, log_prob, hidden):
+    def extend(self, token, log_prob, hidden, context=None):
         return PossibleSolutions(
             tokens=self.tokens + [token], 
             log_probs=self.log_probs + [log_prob],
-            hidden=hidden
+            hidden=hidden,
+            context=context
         )
     
     def n_gram_blocking(self, n):
@@ -61,19 +62,21 @@ class BeamDecoder(nn.Module):
         return idx if idx < len(self.vocab) else self.vocab.stoi["<unk>"]
     
     #def decode(self, src_input, src_len, gen_len, enc_outputs, hidden, src_mask, src_ext, src_oovs, max_oov_len):
-    def decode(self, hidden, gen_len, batch_size):
+    def decode(self, hidden, context, gen_len, batch_size):
         # hidden: [batch_size, hid_dim]
         # src_input: [seq_len, batch_size]
         best_hyps_all = []
         
         for idx in range(batch_size):
             hidden_idx = hidden[idx, :].unsqueeze(0) # [1, hid_dim]
+            context_idx = context[idx, :].unsqueeze(0) # [1, hid_dim]
             
             # Creating hypotheses
             hyps = [PossibleSolutions(
                 tokens=[self.vocab.start()],
                 log_probs=[0.0],
-                hidden=hidden_idx
+                hidden=hidden_idx,
+                context=context_idx,
             )]
             
             # Storing result for specific idx sentence
@@ -81,14 +84,14 @@ class BeamDecoder(nn.Module):
             
             # K = number of running hypotheses
             # Decoding sentence
-            context = torch.cat([hyp.hidden for hyp in hyps], dim=0) # [K, hid_dim]
+            #context = torch.cat([hyp.hidden for hyp in hyps], dim=0) # [K, hid_dim]
             for t in range(gen_len):
                 num_orig_hyps = len(hyps)
                 dec_input = [self.filter_unk(hyp.latest_token) for hyp in hyps]
                 dec_input = torch.tensor(dec_input, dtype=torch.long, device=self.device) # [K]
                 dec_input = self.embedding(dec_input.unsqueeze(0)) # [1, K, emb_dim]
                 hidden_idx = torch.cat([hyp.hidden for hyp in hyps], dim=0) # [K, hid_dim]
-                context_idx = torch.cat([context for hyp in hyps], dim=0) # [K, hid_dim]
+                context_idx = torch.cat([hyp.context for hyp in hyps], dim=0) # [K, hid_dim]
                 
                 # Decoder block
                 #vocab_dist, attn_dist, context_vector, hidden_idx = self.decoder(dec_input.unsqueeze(0), enc_outputs_hyp, hidden_idx, src_mask_hyp)

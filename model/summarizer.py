@@ -150,7 +150,7 @@ class Summarizer(nn.Module):
         
         return outputs
     
-    def decode_summaries(self, revs_hidden, hiddens, trg, src_len, gumbel_hard=True):
+    def decode_summaries(self, revs_hidden, hiddens, context, trg, src_len, gumbel_hard=True):
         vocab_size = self.output_dim
         # Set summary length to the mean review length in the batch
         avg_len = int(torch.ceil(torch.mean(src_len.float())))
@@ -159,14 +159,18 @@ class Summarizer(nn.Module):
         # Compute mean representation
         if self.hp.combine_encs == "ff":
             mean_hidden = hiddens.contiguous().view(-1) # [batch_size * hid_dim]
+            mean_context = context.contiguous().view(-1) # [batch_size * hid_dim]
+            
             mean_hidden = self.combine_encs_net(mean_hidden.unsqueeze(0)) # [1, hid_dim]
+            mean_context = self.combine_encs_net(mean_context.unsqueeze(0)) # [1, hid_dim]
         elif self.hp.combine_encs == "mean":
             mean_hidden = torch.mean(hiddens, dim=0).unsqueeze(0) # [1, hid_dim]
+            mean_context = torch.mean(context, dim=0).unsqueeze(0) # [1, hid_dim]
         else:
             raise Error(f"Concatenation method '{self.hp.combine_encs}' is not supported")
         
         sum_hidden = mean_hidden
-        sum_context = mean_hidden
+        sum_context = mean_context
         
         sum_outputs = torch.zeros(sum_len, 1, vocab_size).to(self.device)
         sum_dec_input = trg[0, 0].unsqueeze(0)
@@ -218,27 +222,22 @@ class Summarizer(nn.Module):
             h_tilt = project_vector(revs_hidden, revs_hidden - h_hat, self.device)  # [batch_size, dec_dim]
             # h_hat: domain-shared text feature representations after GRL
             # h_tilt: domain-specific text feature representations
-            if self.hp.mean_hidden_type == 1:
-                sum_hidden = h_hat
-            elif self.hp.mean_hidden_type == 2:
-                sum_hidden = h_tilt
-            else:
-                sum_hidden = revs_hidden
-                
-            if self.hp.ref_hidden_type == 1:
-                ref_hidden = h_hat
-            elif self.hp.ref_hidden_type == 2:
-                ref_hidden = h_tilt
-            else:
-                ref_hidden = revs_hidden
+            
+            def select_hidden(hidden_type):
+                mapping = {0: revs_hidden, 1: h_hat, 2: h_tilt}
+            
+            sum_hidden = select_hidden(self.hp.mean_hidden_type)
+            ref_hidden = select_hidden(self.hp.ref_hidden_type)
+            context = select_hidden(self.hp.context_hidden_type)
         
         else:
             sum_hidden = revs_hidden
             ref_hidden = revs_hidden
+            context = revs_hidden
         
         ######## Decoding
         revs_outputs = self.decode_reviews(revs_hidden, trg, tf_ratio=tf_ratio)
-        sum_outputs, cos_sim = self.decode_summaries(ref_hidden, sum_hidden, trg, src_len, gumbel_hard)
+        sum_outputs, cos_sim = self.decode_summaries(ref_hidden, sum_hidden, context, trg, src_len, gumbel_hard)
     
         return revs_outputs, cos_sim
     
@@ -259,21 +258,26 @@ class Summarizer(nn.Module):
             h_tilt = project_vector(rec_hidden, rec_hidden - h_hat, self.device)  # [batch_size, dec_dim]
             # h_hat: domain-shared text feature representations after GRL
             # h_tilt: domain-specific text feature representations
-            if self.hp.gen_hidden_type == 1:
-                hiddens = h_hat
-            elif self.hp.gen_hidden_type == 2:
-                hiddens = h_tilt
-            else:
-                hiddens = rec_hidden
+            
+            def select_hidden(hidden_type):
+                mapping = {0: rec_hidden, 1: h_hat, 2: h_tilt}
+                
+            hiddens = select_hidden(self.hp.gen_hidden_type)
+            context = select_hidden(self.hp.context_hidden_type)
         else:
             hiddens = rec_hidden
+            context = rec_hidden
         
         # Compute mean representation
         if self.hp.combine_encs == "ff":
             mean_hidden = hiddens.contiguous().view(-1) # [batch_size * hid_dim]
+            mean_context = context.contiguous().view(-1) # [batch_size * hid_dim]
+            
             mean_hidden = self.combine_encs_net(mean_hidden.unsqueeze(0)) # [1, hid_dim]
+            mean_context = self.combine_encs_net(mean_context.unsqueeze(0)) # [1, hid_dim]
         elif self.hp.combine_encs == "mean":
             mean_hidden = torch.mean(hiddens, dim=0).unsqueeze(0) # [1, hid_dim]
+            mean_context = torch.mean(context, dim=0).unsqueeze(0) # [1, hid_dim]
         else:
             raise Error(f"Concatenation method '{self.hp.combine_encs}' is not supported")
         
@@ -281,18 +285,18 @@ class Summarizer(nn.Module):
         sum_len = 75 #min(max(avg_len * 2, 20), 75)
         vocab_size = self.decoder.output_dim
         
-        hidden = mean_hidden
         if self.hp.beam_decode:
-            summaries = self.beam_decoder.decode(hidden=hidden, gen_len=sum_len, batch_size=1)
+            summaries = self.beam_decoder.decode(hidden=mean_hidden, context=mean_context gen_len=sum_len, batch_size=1)
         else:
-            context = mean_hidden
+            hidden = mean_hidden
+            context = mean_context
             outputs = torch.zeros(sum_len, 1, vocab_size).to(self.device)
             dec_input = src_input[0, 0].unsqueeze(0)
         
             for t in range(1, sum_len):
                 dec_emb_input = self.embedding_rec(dec_input.unsqueeze(0)) # [1, batch_size, emb_dim]
                 output, hidden = self.decoder(dec_emb_input, hidden.unsqueeze(0), context.unsqueeze(0))
-                prob = logits_to_prob(output, method="gumbel", tau=1.0, eps=1e-10, gumbel_hard=False)
+                prob = logits_to_prob(output, method="softmax", tau=1.0, eps=1e-10, gumbel_hard=False)
                 outputs[t] = prob
                 top1 = prob.argmax(1)
                 dec_input = top1

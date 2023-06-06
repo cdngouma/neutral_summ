@@ -17,20 +17,18 @@ from utils.model_utils import freeze
 from utils.Errors import loss_estimation
 #from utils.ROUGE_eval import Rouge_eval
 
-from configs import config #HP, DatasetConfig
-
 import time
 import copy
 from tqdm import tqdm
 
 
 class Procedure():
-    def __init__(self, vocab, writer, train_ter, valid_iter):
+    def __init__(self, hp, ds_config, vocab, writer, train_ter, valid_iter):
         self.train_iter = train_ter
         self.valid_iter = valid_iter
         
-        self.hp = config.HP()
-        self.ds = config.DatasetConfig()
+        self.hp = hp
+        self.ds = ds_config
         self.device = self.hp.device
         self.vocab = vocab
         
@@ -46,16 +44,20 @@ class Procedure():
         self.writer = writer
 
     def train_lm(self, path=None, tolerance=3, check_every=5):
-        if path:
-            # Load model
-            print(f"Loading Language Model from {path}")
-            self.lm = LanguageModel(self.vocab, hp=self.hp).to(self.device)
-            self.lm.load_state_dict(torch.load(path))
-        else:
-            self.lm = LanguageModel(self.vocab, hp=self.hp).to(self.device)
-            self.lm.apply(self.hp.weights_init)
-            
-        model_name = self.gen_model_name(model="lm")
+        """
+        Train the language model module
+        
+        Input:
+            path (str): Path where to save the trained language model. If None, save to a default directory
+            tolerance (int): Defines when to stop training if there is no improvement with the loss
+            check_every (int): Check loss value every certain number of epochs
+        """
+        self.lm = LanguageModel(self.vocab, hp=self.hp).to(self.device)
+        self.lm.apply(self.hp.weights_init)
+        
+        if not path:
+            model_name = self.gen_model_name(model="lm")
+            path = f"./outputs/{model_name}"
         
         self.optimizer = self.hp.optimizer(
             params=self.lm.parameters(),
@@ -69,15 +71,16 @@ class Procedure():
         best_loss = float("inf")
         counter = tolerance
         
-        cls_weight = 1.0 #self.hp.cls_weight
-        rec_weight = 0.0
+        cls_weight = self.hp.cls_weight
+        rec_weight = 0.0  # For a certain number of epochs, ignore the reconstruction loss
         
-        self.acc_size = 64
+        self.acc_size = self.hp.acc_size
         
-        for epoch in range(n_epochs): #n_epochs
-            if epoch == 10:
+        for epoch in range(n_epochs):
+            # After a certain number of epochs, consider both the classifier and reconstruction losses
+            if epoch == self.hp.cls_num_epochs:
                 self.acc_size = 0
-                rec_weight = 1.0
+                rec_weight = self.hp.rec_weight
             
             epoch_st = time.perf_counter()
             self.lm.train()
@@ -93,17 +96,18 @@ class Procedure():
                 valid_loss = self.run_epochs(epoch, valid_iterator_, cls_weight, rec_weight, alpha, model="lm", mode="Eval")
                 print(f"| Epoch: {epoch+1:03} | Train loss: {train_loss:.3f} | Valid loss: {valid_loss:.3f} | time: {(time.perf_counter() - epoch_st):.2f}s'")
                 
-                if epoch >= 50:
-                    if valid_loss < best_loss or epoch%5 == 0:
-                        path = f"./outputs/{model_name}"
-                        torch.save(self.lm.state_dict(), path)
+                if epoch >= self.hp.save_epoch:
+                    # Save best model
+                    if valid_loss <= best_loss:
+                        save_path = re.sub("\.pt$", f".{epoch}_epochs.pt", "path")
+                        torch.save(self.lm.state_dict(), save_path)
                         best_loss = valid_loss
                         best_epoch = epoch
                         counter = tolerance
                     
-                    #elif epoch%check_every == 0:
-                    #   counter -= 1
-                
+                    elif epoch%check_every == 0:
+                        counter -= 1
+            
             if counter == 0:
                 print(f"Ending training early after {epoch+1} epochs. best epoch: {best_epoch+1}")
                 break 
@@ -185,7 +189,9 @@ class Procedure():
         torch.save(self.summarizer, f"./outputs/{model_name}")
     
     def run_epochs(self, epoch, iterator_, cls_weight=4.0, rec_weight=1.0, alpha=0.5, model="lm", mode="Train", debug=False):
+        """
         
+        """
         epoch_loss = 0.0
         epoch_rec = 0.0
         epoch_cls = 0.0
@@ -198,7 +204,8 @@ class Procedure():
         ACC_SIZE = self.acc_size
         accumulation_steps = 0
         
-        for i in tqdm(range(iter_size), unit="batch"):
+        # for i in tqdm(range(iter_size), unit="batch"):
+        for i in range(iter_size):
             batch = iterator_.next()
             
             src_input = batch.enc_input.permute(1, 0).contiguous().to(self.device) # [seq_len, batch_size]
@@ -336,9 +343,7 @@ class Procedure():
                 batch.to(self.device)
                 # Unpack batch
                 src_input = batch.enc_input.permute(1,0).contiguous()
-                #print([ids for ids in src_input])
                 revs = [self.vocab.outputids2words(ids) for ids in batch.enc_input]
-                #trg = batch.enc_input.permute(1,0).contiguous()
                 src_len = batch.enc_len
                 prod_id = batch.src_prod_id
                 summaries, hiddens, mean_hiddens = summarizer.inference(src_input, src_len)
@@ -377,10 +382,10 @@ class Procedure():
             
         if model == "lm":
             n_epochs = self.hp.lm_epochs
-            name = f"{lm_name}.batch_{batch_size}_docs.{n_epochs}_epochs.{dec_hid}.lr{self.hp.lm_lr}.pt"
+            name = f"{lm_name}.batch_{batch_size}_docs.{dec_hid}.lr{self.hp.lm_lr}.pt"
         elif model == "summarizer":
             n_epochs = self.hp.summarizer_epochs
-            name = f"summ.{lm_name}.batch_{batch_size}_docs.lm_lr{self.hp.lm_lr}.{n_epochs}_epochs.dec_{dec_hid}.sum_{sum_hid}.lr{self.hp.summ_lr}.pt"
+            name = f"summ.{lm_name}.batch_{batch_size}_docs.lm_lr{self.hp.lm_lr}.dec_{dec_hid}.sum_{sum_hid}.lr{self.hp.summ_lr}.pt"
         else:
             raise Error(f"model {model} is not recognized")
             

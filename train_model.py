@@ -75,14 +75,6 @@ def build_dataloaders(ds_config, train=True):
         return test_iter, test_references
     return train_iter, valid_iter, vocab
 
-    
-def train_lm():
-    pass
-
-
-def train_summarizer():
-    pass
-
 
 def load_parameters(agrs):
     """
@@ -137,10 +129,11 @@ def run(args):
     if args.mode == "train":
         # Load datasets
         train_iter, valid_iter, vocab = build_dataloaders(ds_config, train=True)
-        procedure = Procedure(vocab, writer=writer, train_ter=train_iter, valid_iter=valid_iter)
+        procedure = Procedure(hp, ds_config, vocab, writer=writer, train_ter=train_iter, valid_iter=valid_iter)
         
         # Train language model
-        procedure.train_lm()
+        procedure.train_lm(path=args.lm_path, tolerance=args.tolerance, check_every=args.check_every)
+    
     elif args.mode == "finetune":
         pass
     elif args.mode == "eval":
@@ -165,6 +158,11 @@ if __name__ == "__main__":
     parser.add_argument("--ref_hidden", type=int, dest="ref_hidden_type", default=None, help="Hidden representations used to compute the cosine similarity.")
     parser.add_argument("--gen_hidden", type=int, dest="gen_hidden_type", default=None, help="Hidden representations used to generate summaries at test time.")
     parser.add_argument("--beam_decode", type=bool, default=None, help="Enable or disable beam decoding.")
+    parser.add_argument("--tolerance", type=int, default=None, help="Defines how many times to check the loss value before stopping the training early if the loss doesn't improve.")
+    parser.add_argument("--check_every", type=int, default=None, help="Number of epochs after which check the loss value in order to stop early.")
+    
+    parser.add_argument("--lm_path", type=str, default=None, help="Path where to save the trained language model or path to a pretrained language model.")
+    parser.add_argument("--model_path", type=str, default=None, help="Path where to save the summarizer model.")
     
     # Parse arguments
     args = parser.parse_args()

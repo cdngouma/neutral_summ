@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 
 class Procedure():
-    def __init__(self, hp, ds_config, vocab, writer, train_ter, valid_iter):
+    def __init__(self, hp, ds_config, vocab, writer=None, train_ter=None, valid_iter=None):
         self.train_iter = train_ter
         self.valid_iter = valid_iter
         
@@ -43,7 +43,7 @@ class Procedure():
         # Folowing results through tensorboard
         self.writer = writer
 
-    def train_lm(self, path=None, tolerance=3, check_every=5):
+    def train_lm(self, model_name=None, tolerance=3, check_every=5):
         """
         Train the language model module
         
@@ -55,9 +55,9 @@ class Procedure():
         self.lm = LanguageModel(self.vocab, hp=self.hp).to(self.device)
         self.lm.apply(self.hp.weights_init)
         
-        if not path:
+        if not model_name:
             model_name = self.gen_model_name(model="lm")
-            path = f"./outputs/{model_name}"
+        path = f"./outputs/models/lm/{model_name}"
         
         self.optimizer = self.hp.optimizer(
             params=self.lm.parameters(),
@@ -112,9 +112,11 @@ class Procedure():
             
             if counter == 0:
                 print(f"Ending training early after {epoch+1} epochs. best epoch: {best_epoch+1}")
-                break 
+                break
+                
+        print(f"Saved model in {path}.")
                     
-    def train_summarizer(self, path, lm_path, tolerance=3, check_every=5):
+    def train_summarizer(self, model_name, lm_path, tolerance=3, check_every=5):
         """
         Train the summarizer module
         
@@ -123,9 +125,9 @@ class Procedure():
             tolerance (int): Defines when to stop training if there is no improvement with the loss
             check_every (int): Check loss value every certain number of epochs
         """
-        if not path:
+        if not model_name:
             model_name = self.gen_model_name(model="summarizer")
-            path = f"./outputs/{model_name}"
+        path = f"./outputs/models/summ/{model_name}"
         
         print(f"Loading Language Model from {lm_path}")
         
@@ -196,6 +198,8 @@ class Procedure():
             if counter == 0:
                 print(f"Ending training early after {epoch+1} epochs. best epoch: {best_epoch+1}")
                 break
+        
+        print(f"Saved model in {path}.")
     
     def run_epochs(self, epoch, iterator_, cls_weight=4.0, rec_weight=1.0, alpha=0.5, model="lm", mode="Train", debug=False):
         epoch_loss = 0.0
@@ -329,10 +333,12 @@ class Procedure():
         
         return all_reviews
     
-    def generate_summaries(self, itr, path, batch_idx=None):
+    def generate_summaries(self, itr, model_name, batch_idx=None):
         """
         Generate summaries
         """
+        path = f"./outputs/models/summ/{model_name}"
+        
         print(f"Loading summarizer from {path}")
         
         # Load summarizer
@@ -342,8 +348,7 @@ class Procedure():
         summarizer.eval()
         
         all_summaries = []
-        all_hiddens = []
-        all_mean_hiddens = []
+        
         iterator_ = iter(itr)
         tot_elements = len(batch_idx) if batch_idx else len(iterator_)
         
@@ -360,10 +365,8 @@ class Procedure():
                 prod_id = batch.src_prod_id
                 summaries, hiddens, mean_hiddens = summarizer.inference(src_input, src_len)
                 all_summaries.append((prod_id, summaries))
-                all_hiddens.append((prod_id, hiddens))
-                all_mean_hiddens.append((prod_id, mean_hiddens))
         
-        return all_summaries, all_hiddens, all_mean_hiddens
+        return all_summaries
     
     def gen_model_name(self, model="lm"):
         """

@@ -120,6 +120,24 @@ def load_parameters(agrs):
     return ds_config, hp
     
 
+def save_summaries(summaries, out_dir, model_path):
+    """
+    Save generated summaries to file
+    """
+    df = []
+    for e in summaries:
+        prod_id = e[0]
+        summary = e[1][0]
+        df.append({
+            "model_path": model_path,
+            "prod_id": prod_id, 
+            "summary": summary
+        })
+    df = pd.DataFrame(df)
+    path = f"{out_dir}generated_summaries"
+    df.to_csv(path, index=False)
+
+
 def run(args):
     # Load dataset config and model hypermarameters
     ds_config, hp = load_parameters(args)
@@ -139,17 +157,20 @@ def run(args):
         
         if args.mode == "lm":
             # Train language model
-            procedure.train_lm(path=args.lm_path, tolerance=args.tolerance, check_every=args.check_every)
+            procedure.train_lm(model_name=args.model_name, tolerance=args.tolerance, check_every=args.check_every)
         elif args.mode == "summ":
             # Train summarizer
-            procedure.train_summarizer(path=args.summ_path, tolerance=args.tolerance, check_every=args.check_every)
+            procedure.train_summarizer(model_name=args.model_name, tolerance=args.tolerance, check_every=args.check_every)
     
     elif args.mode == "eval":
         # Load datasets
         _, vocab = build_dataloaders(ds_config, dataset="train")
-        test_iter, references = build_dataloaders(ds_config, dataset="test")
-        procedure = Procedure(hp, ds_config, vocab, writer=writer, train_ter=train_iter, valid_iter=valid_iter)
-    
+        test_iter, _ = build_dataloaders(ds_config, dataset="test")
+        procedure = Procedure(hp, ds_config, vocab)
+        
+        # Generate and save summaries
+        summaries = procedure.generate_summaries(itr=test_iter, model_name=args.model_name)
+        save_summaries(summaries, out_dir=args.output_dir, model_name=args.model_name)
     else:
         raise Exception(f"mode '{args.mode}' is not supported. Try 'train', 'finetune', or 'eval'.")
 
@@ -157,7 +178,7 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Add arguments
-    parser.add_argument("--mode", type=str, required=True, default="summ", help="train or test.")
+    parser.add_argument("--mode", type=str, required=True, help="train or test.")
     parser.add_argument("-b", "--batch_size", type=int, default=None, help="Number of reviews per batch.")
     parser.add_argument("--epochs", type=int, default=None, help="Number of training epochs.")
     parser.add_argument("--use_rec", type=bool, default=None, help="Enable or disable reviews reconstruction. If false, the language model only uses the classifier.")
@@ -174,7 +195,8 @@ if __name__ == "__main__":
     parser.add_argument("--check_every", type=int, default=None, help="Number of epochs after which check the loss value in order to stop early.")
     
     parser.add_argument("--lm_path", type=str, default=None, help="Path where to save the trained language model or path to a pretrained language model.")
-    parser.add_argument("--summ_path", type=str, default=None, help="Path where to save the summarizer model.")
+    parser.add_argument("--model_name", type=str, default=None, help="Name of the model. If None, a name will be automatically generated.")
+    parser.add_argument("--output_dir", type=str, default="./outputs/summaries/", help="Directory where to save generated summaries.")
     
     # Parse arguments
     args = parser.parse_args()

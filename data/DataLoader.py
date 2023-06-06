@@ -37,7 +37,6 @@ class AmazonDataset(Dataset):
         super().__init__()
         
         self.is_train = is_train
-        
         self.max_len_rev = max_len_rev
         
         # Load csv dataset, output text, and batch_ids
@@ -85,10 +84,7 @@ class AmazonDataset(Dataset):
             tokens = self.tokenize(t)
             counter.update(tokens)
             
-        self.vocab = Vocab.from_counter(counter=counter,
-                                   vocab_size=vocab_size,
-                                   min_freq=min_freq,
-                                   specials=specials)
+        self.vocab = Vocab.from_counter(counter=counter, vocab_size=vocab_size, min_freq=min_freq, specials=specials)
         print(f"Vocabulary size: {len(self.vocab)}")
         return self.vocab
     
@@ -332,20 +328,17 @@ def build_dataloader(file_path, vocab_size=10000, vocab_min_freq=1, vocab=None, 
     Create a dataset using the file in file_path, calls Pytorch DataLoader and returns the 'iterator' object for
     output - batch = next(iter(data_loader))
     """
-    #Create dataset processed (tokenized and lowercase) - Field equivalent
+    # Create dataset processed (tokenized and lowercase) - Field equivalent
     dataset = AmazonDataset(file_path, max_num_reviews, is_train, refs_path, vocab, max_len_rev=max_len_rev, preprocess=False)
     
     if is_train:
         specials = [PAD_TOKEN, UNK_TOKEN, START_DECODING, STOP_DECODING]
-        vocab = dataset.build_vocab(vocab_size=vocab_size, 
-                                    min_freq=vocab_min_freq, 
-                                    specials=specials)
+        vocab = dataset.build_vocab(vocab_size=vocab_size, min_freq=vocab_min_freq, specials=specials)
     else:
         assert vocab is not None
     
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle_batch,
                              collate_fn=lambda data, v=vocab: Batch(data=data, vocab=v))
-    
     if preprocess:
         references = dataset.get_references()
     else:

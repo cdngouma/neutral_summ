@@ -99,11 +99,13 @@ class Procedure():
                 if epoch >= self.hp.save_epoch:
                     # Save best model
                     if valid_loss <= best_loss:
-                        save_path = re.sub("\.pt$", f".{epoch}_epochs.pt", "path")
-                        torch.save(self.lm.state_dict(), save_path)
                         best_loss = valid_loss
                         best_epoch = epoch
                         counter = tolerance
+                        
+                        # Save best model
+                        save_path = re.sub("\.pt$", f".{epoch}_epochs.pt", path)
+                        torch.save(self.lm.state_dict(), save_path)
                     
                     elif epoch%check_every == 0:
                         counter -= 1
@@ -112,25 +114,33 @@ class Procedure():
                 print(f"Ending training early after {epoch+1} epochs. best epoch: {best_epoch+1}")
                 break 
                     
-    def train(self, lm_path=None, tolerance=3, check_every=5):
-        if lm_path is None:
-            self.train_lm()
-            lm_path = f"./outputs/{self.gen_model_name(model='lm')}"
-            
+    def train_summarizer(self, path, lm_path, tolerance=3, check_every=5):
+        """
+        Train the summarizer module
+        
+        Input:
+            path (str): Path where to save the trained language model. If None, save to a default directory
+            tolerance (int): Defines when to stop training if there is no improvement with the loss
+            check_every (int): Check loss value every certain number of epochs
+        """
+        if not path:
+            model_name = self.gen_model_name(model="summarizer")
+            path = f"./outputs/{model_name}"
+        
         print(f"Loading Language Model from {lm_path}")
         
         self.lm = LanguageModel(self.vocab, hp=self.hp).to(self.device)
         self.lm.load_state_dict(torch.load(lm_path))
-        #self.lm.to(self.device)
         
         enc_rec = self.lm.encoder_rec
         enc_cls = self.lm.encoder_cls
         dec = self.lm.decoder
-        cls_ = None #self.lm.classifier
+        cls_ = self.lm.classifier
         emb_rec = self.lm.embedding_rec
         emb_cls = self.lm.embedding_cls
-        grl = None#self.lm.grl
+        grl = self.lm.grl
         
+        # Freeze the weights of certain modules
         freeze(enc_rec)
         freeze(enc_cls)
         #freeze(dec)
@@ -146,15 +156,13 @@ class Procedure():
         
         model_name = self.gen_model_name(model="summarizer")
         n_epochs = self.hp.summarizer_epochs
+        
         print(f"Training Summarizer for {n_epochs} epochs...")
         best_loss = float("inf")
         best_epoch = 0
         counter = tolerance
         cls_weight = self.hp.cls_weight
         rec_weight = 1.0
-        
-        if n_epochs == 0:
-            torch.save(self.summarizer, f"./outputs/{model_name}")
         
         for epoch in range(n_epochs):
             epoch_st = time.perf_counter()
@@ -171,27 +179,25 @@ class Procedure():
                 valid_loss = self.run_epochs(epoch, valid_iterator_, cls_weight, rec_weight, alpha, model="summarizer", mode="Eval")
                 print(f"| Epoch: {epoch+1:03} | Train loss: {train_loss:.3f} | Valid loss: {valid_loss:.3f} | time: {(time.perf_counter() - epoch_st):.2f}s'")
             
-                if epoch >= 0:
-                    if valid_loss < best_loss:
-                        torch.save(self.summarizer, f"./outputs/{model_name}")
-                        best_loss = valid_loss
-                        best_epoch = epoch
-                        counter = tolerance
+                if valid_loss <= best_loss:
+                    best_loss = valid_loss
+                    best_epoch = epoch
+                    counter = tolerance
                     
-                    elif epoch%check_every == 0:
-                        counter -= 1   
-                torch.cuda.empty_cache()
+                    # Save best model
+                    save_path = re.sub("\.pt$", f".{epoch}_epochs.pt", path)
+                    torch.save(self.summarizer, save_path)
+                    
+                elif epoch%check_every == 0:
+                    counter -= 1   
+            
+            torch.cuda.empty_cache()
                         
             if counter == 0:
                 print(f"Ending training early after {epoch+1} epochs. best epoch: {best_epoch+1}")
                 break
-        
-        torch.save(self.summarizer, f"./outputs/{model_name}")
     
     def run_epochs(self, epoch, iterator_, cls_weight=4.0, rec_weight=1.0, alpha=0.5, model="lm", mode="Train", debug=False):
-        """
-        
-        """
         epoch_loss = 0.0
         epoch_rec = 0.0
         epoch_cls = 0.0
@@ -292,12 +298,13 @@ class Procedure():
             
         return epoch_loss / iter_size
 
-    def generate(self, itr, lm_path=None, batch_idx=None):
-        if lm_path is None:
-            lm_path = f"./outputs/{self.gen_model_name(model='lm')}"
-            
+    def reconstruct_reviews(self, itr, lm_path, batch_idx=None):
+        """
+        Reconstruct reviews
+        """
         print(f"Loading Language Model from {lm_path}")
         
+        # Load pretrained language model
         lm = LanguageModel(self.vocab, hp=self.hp).to(self.device)
         lm.load_state_dict(torch.load(lm_path))
         
@@ -322,19 +329,24 @@ class Procedure():
         
         return all_reviews
     
-    def generate_summaries(self, itr, path=None, batch_idx=None):
-        if path is None:
-            path = f"./outputs/{self.gen_model_name(model='summarizer')}"
-            
+    def generate_summaries(self, itr, path, batch_idx=None):
+        """
+        Generate summaries
+        """
         print(f"Loading summarizer from {path}")
+        
+        # Load summarizer
         summarizer = torch.load(path)
         summarizer.hp = self.hp
+        
         summarizer.eval()
+        
         all_summaries = []
         all_hiddens = []
         all_mean_hiddens = []
         iterator_ = iter(itr)
         tot_elements = len(batch_idx) if batch_idx else len(iterator_)
+        
         with torch.no_grad():
             for i in tqdm(range(tot_elements)):
                 batch = iterator_.next()
@@ -354,6 +366,9 @@ class Procedure():
         return all_summaries, all_hiddens, all_mean_hiddens
     
     def gen_model_name(self, model="lm"):
+        """
+        Generate a name of a model
+        """
         hidden_states = {0: "baseH", 1: "Hhat", 2: "Htilt"}
         dec_hid = hidden_states.get(self.hp.dec_hidden_type)
         sum_hid = hidden_states.get(self.hp.mean_hidden_type)
@@ -393,6 +408,9 @@ class Procedure():
 
     
 def binary_accuracy(preds, y):
+    """
+    Compute the accuracy score
+    """
     rounded_preds = torch.round(preds)
     correct = (rounded_preds == y).float()
     acc = correct.sum() / preds.shape[0]

@@ -13,7 +13,7 @@ from configs.config import follow
 import argparse
 
 
-def build_dataloaders(ds_config, train=True):
+def build_dataloaders(ds_config, dataset="train"):
     """
     Instanciates dataloader for train, valid and test
     
@@ -23,7 +23,7 @@ def build_dataloaders(ds_config, train=True):
         train_iter, valid_iter, test_iter: Dataloaders
         test_references: List of reference summaries
     """
-    if train:
+    if dataset == "train":
         train_iter, vocab, _ = build_dataloader(
             file_path=ds_config.train_data, 
             vocab_size=ds_config.vocab_size,
@@ -39,7 +39,9 @@ def build_dataloaders(ds_config, train=True):
             batch_size=ds_config.batch_size,
             device=ds_config.device
         )
-    
+        return train_iter, vocab
+
+    elif dataset == "valid":
         valid_iter, _, valid_references = build_dataloader(
             file_path=ds_config.valid_data, 
             vocab_size=ds_config.vocab_size,
@@ -55,7 +57,9 @@ def build_dataloaders(ds_config, train=True):
             batch_size=ds_config.batch_size,
             device=ds_config.device
         )
-    else:
+        return valid_iter
+
+    elif dataset == "test":
         test_iter, _, test_references = build_dataloader(
             file_path=ds_config.test_data, 
             vocab_size=ds_config.vocab_size,
@@ -73,7 +77,8 @@ def build_dataloaders(ds_config, train=True):
         )
         
         return test_iter, test_references
-    return train_iter, valid_iter, vocab
+    else:
+        raise Exception(f"Dataset '{dataset}' was not found.")
 
 
 def load_parameters(agrs):
@@ -126,18 +131,25 @@ def run(args):
     else:
         writer = None
     
-    if args.mode == "train":
+    if args.mode == "lm" or args.mode == "summ":
         # Load datasets
-        train_iter, valid_iter, vocab = build_dataloaders(ds_config, train=True)
+        train_iter, vocab = build_dataloaders(ds_config, dataset="train")
+        valid_iter = build_dataloaders(ds_config, dataset="valid")
         procedure = Procedure(hp, ds_config, vocab, writer=writer, train_ter=train_iter, valid_iter=valid_iter)
         
-        # Train language model
-        procedure.train_lm(path=args.lm_path, tolerance=args.tolerance, check_every=args.check_every)
+        if args.mode == "lm":
+            # Train language model
+            procedure.train_lm(path=args.lm_path, tolerance=args.tolerance, check_every=args.check_every)
+        elif args.mode == "summ":
+            # Train summarizer
+            procedure.train_summarizer(path=args.summ_path, tolerance=args.tolerance, check_every=args.check_every)
     
-    elif args.mode == "finetune":
-        pass
     elif args.mode == "eval":
-        pass
+        # Load datasets
+        _, vocab = build_dataloaders(ds_config, dataset="train")
+        test_iter, references = build_dataloaders(ds_config, dataset="test")
+        procedure = Procedure(hp, ds_config, vocab, writer=writer, train_ter=train_iter, valid_iter=valid_iter)
+    
     else:
         raise Exception(f"mode '{args.mode}' is not supported. Try 'train', 'finetune', or 'eval'.")
 
@@ -145,7 +157,7 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Add arguments
-    parser.add_argument("--mode", type=str, required=True, default="train", help="train or test.")
+    parser.add_argument("--mode", type=str, required=True, default="summ", help="train or test.")
     parser.add_argument("-b", "--batch_size", type=int, default=None, help="Number of reviews per batch.")
     parser.add_argument("--epochs", type=int, default=None, help="Number of training epochs.")
     parser.add_argument("--use_rec", type=bool, default=None, help="Enable or disable reviews reconstruction. If false, the language model only uses the classifier.")
@@ -162,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument("--check_every", type=int, default=None, help="Number of epochs after which check the loss value in order to stop early.")
     
     parser.add_argument("--lm_path", type=str, default=None, help="Path where to save the trained language model or path to a pretrained language model.")
-    parser.add_argument("--model_path", type=str, default=None, help="Path where to save the summarizer model.")
+    parser.add_argument("--summ_path", type=str, default=None, help="Path where to save the summarizer model.")
     
     # Parse arguments
     args = parser.parse_args()

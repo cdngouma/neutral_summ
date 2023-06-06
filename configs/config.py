@@ -52,7 +52,7 @@ class HP():
         self.use_cls = True  # Specify if document (sentiment) classification should be done
         self.use_grl = True  # Specify if the gradient reversal layer should be used
         self.use_proj = True  # Specify if the projection mechanism should be used
-        self.use_gat = True  # Specify in the Graph Attention NN (GAT) should be used in the encoder
+        self.use_gat = False  # Specify in the Graph Attention NN (GAT) should be used in the encoder
         
         assert (not self.use_rec and self.use_cls) or self.use_rec
         
@@ -91,13 +91,15 @@ class HP():
         # 0: regular hidden states (H)
         # 1: domain-independent hidden states (H_hat)
         # 2: domain-specific hidden states (H_tilt)
-        self.dec_hidden_type = 0#2  # Used to train the language model (reconstruction)
-        self.mean_hidden_type = 0#1 # Used to compute the mean representation of the input reviews (default H_hat)
-        self.ref_hidden_type = 0#0  # Used to compute the cosine similarity (default H)
-        self.gen_hidden_type = 0#1  # Used to generate summaries during inference (default H_hat)
+        self.dec_hidden_type = 2  # Used to train the language model (reconstruction)
+        self.mean_hidden_type = 0 # Used to compute the mean representation of the input reviews (default H)
+        self.mean_context_type = 0 # Used to compute the mean representation of the input reviews (default H)
+        self.ref_hidden_type = 1  # Used to compute the cosine similarity (default H_hat)
+        self.gen_hidden_type = 0  # Used to generate summaries during inference (default H)
         
         assert (self.dec_hidden_type in [0, 1, 2] and self.use_proj) or self.dec_hidden_type == 0
         assert (self.mean_hidden_type in [0, 1, 2] and self.use_proj) or self.mean_hidden_type == 0
+        assert (self.mean_context_type in [0, 1, 2] and self.use_proj) or self.mean_context_type == 0
         assert (self.ref_hidden_type in [0, 1, 2] and self.use_proj) or self.ref_hidden_type == 0
         assert (self.gen_hidden_type in [0, 1, 2] and self.use_proj) or self.gen_hidden_type == 0
         
@@ -143,3 +145,4 @@ class HP():
         
         if self.acc_size is None:
             self.acc_size = 0
+ 

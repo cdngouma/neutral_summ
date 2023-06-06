@@ -120,7 +120,7 @@ def load_parameters(agrs):
     return ds_config, hp
     
 
-def save_summaries(summaries, out_dir, model_path):
+def save_summaries(summaries, output_path, model_path):
     """
     Save generated summaries to file
     """
@@ -134,8 +134,7 @@ def save_summaries(summaries, out_dir, model_path):
             "summary": summary
         })
     df = pd.DataFrame(df)
-    path = f"{out_dir}generated_summaries"
-    df.to_csv(path, index=False)
+    df.to_csv(output_path, index=False)
 
 
 def run(args):
@@ -196,7 +195,7 @@ if __name__ == "__main__":
     
     parser.add_argument("--lm_path", type=str, default=None, help="Path where to save the trained language model or path to a pretrained language model.")
     parser.add_argument("--model_name", type=str, default=None, help="Name of the model. If None, a name will be automatically generated.")
-    parser.add_argument("--output_dir", type=str, default="./outputs/summaries/", help="Directory where to save generated summaries.")
+    parser.add_argument("--output_path", type=str, default="./outputs/summaries/generated_summaries.csv", help="Path where to save generated summaries as CSV files.")
     
     # Parse arguments
     args = parser.parse_args()

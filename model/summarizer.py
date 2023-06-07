@@ -286,7 +286,7 @@ class Summarizer(nn.Module):
         vocab_size = self.decoder.output_dim
         
         if self.hp.beam_decode:
-            summaries = self.beam_decoder.decode(hidden=mean_hidden, context=mean_context gen_len=sum_len, batch_size=1)
+            summaries = self.beam_decoder.decode(hidden=mean_hidden, context=mean_context, gen_len=sum_len, batch_size=1)
         else:
             hidden = mean_hidden
             context = mean_context

@@ -11,9 +11,10 @@ from torch.utils.tensorboard import SummaryWriter
 from configs.config import follow
 
 import argparse
+import re
 
 
-def build_dataloaders(ds_config, dataset="train"):
+def build_dataloaders(ds_config, dataset="train", vocab=None):
     """
     Instanciates dataloader for train, valid and test
     
@@ -75,7 +76,6 @@ def build_dataloaders(ds_config, dataset="train"):
             batch_size=ds_config.batch_size,
             device=ds_config.device
         )
-        
         return test_iter, test_references
     else:
         raise Exception(f"Dataset '{dataset}' was not found.")
@@ -110,10 +110,12 @@ def load_parameters(agrs):
     hp.beam_decode = args.beam_decode if args.beam_decode else hp.beam_decode
     
     num_epochs = args.epochs
-    if args.mode == "train":
+    if args.mode == "lm":
         hp.lm_epochs = num_epochs if num_epochs else hp.lm_epochs
-    elif args.mode == "finetune" or args.mode == "eval":
+    elif args.mode == "summ" or args.mode == "eval":
         hp.summarizer_epochs = num_epochs if num_epochs else hp.summarizer_epochs
+    elif args.mode == "eval":
+        pass
     else:
         raise Exception(f"mode '{args.mode}' is not supported. Try 'train', 'finetune', or 'eval'.")
     
@@ -151,7 +153,7 @@ def run(args):
     if args.mode == "lm" or args.mode == "summ":
         # Load datasets
         train_iter, vocab = build_dataloaders(ds_config, dataset="train")
-        valid_iter = build_dataloaders(ds_config, dataset="valid")
+        valid_iter = build_dataloaders(ds_config, dataset="valid", vocab=vocab)
         procedure = Procedure(hp, ds_config, vocab, writer=writer, train_ter=train_iter, valid_iter=valid_iter)
         
         if args.mode == "lm":
@@ -164,7 +166,7 @@ def run(args):
     elif args.mode == "eval":
         # Load datasets
         _, vocab = build_dataloaders(ds_config, dataset="train")
-        test_iter, _ = build_dataloaders(ds_config, dataset="test")
+        test_iter, _ = build_dataloaders(ds_config, dataset="test", vocab=vocab)
         procedure = Procedure(hp, ds_config, vocab)
         
         # Generate and save summaries
@@ -190,8 +192,8 @@ if __name__ == "__main__":
     parser.add_argument("--ref_hidden", type=int, dest="ref_hidden_type", default=None, help="Hidden representations used to compute the cosine similarity.")
     parser.add_argument("--gen_hidden", type=int, dest="gen_hidden_type", default=None, help="Hidden representations used to generate summaries at test time.")
     parser.add_argument("--beam_decode", type=bool, default=None, help="Enable or disable beam decoding.")
-    parser.add_argument("--tolerance", type=int, default=None, help="Defines how many times to check the loss value before stopping the training early if the loss doesn't improve.")
-    parser.add_argument("--check_every", type=int, default=None, help="Number of epochs after which check the loss value in order to stop early.")
+    parser.add_argument("--tolerance", type=int, default=3, help="Defines how many times to check the loss value before stopping the training early if the loss doesn't improve.")
+    parser.add_argument("--check_every", type=int, default=5, help="Number of epochs after which check the loss value in order to stop early.")
     
     parser.add_argument("--lm_path", type=str, default=None, help="Path where to save the trained language model or path to a pretrained language model.")
     parser.add_argument("--model_name", type=str, default=None, help="Name of the model. If None, a name will be automatically generated.")

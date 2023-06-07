@@ -128,7 +128,7 @@ class HP():
         self.n_gram_block = 3
         
         ######## TRAINING PARAMETTERS ########
-        self.cls_num_epochs = 10 # Number of epochs for which train the classifier alone
+        self.cls_num_epochs = 1 # Number of epochs for which train the classifier alone
         self.cls_weight = 1.0 # Classifier loss weight
         self.rec_weight = 1.0 # reconstruction loss weight
         self.acc_size = 64    # gradient accumulation steps

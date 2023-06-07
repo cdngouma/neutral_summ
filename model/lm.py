@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from model.revgrad import GradReversal
 from utils.model_utils import load_gloveembeddings, project_vector, cosine_similarity, postprocess, is_special, clean_up_tokenization, mask_range, logits_to_prob
-from model.attention import Attention, GAT
+from model.attention import GAT
 from model.encoder import Encoder
 from model.decoder import Decoder
 from model.classifier import DomainClassifier

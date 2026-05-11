@@ -1,5 +1,3 @@
-# neutral_summ
-
 ## Summary
 
 This repository contains an early prototype developed during work on the paper **“Objective and neutral summarization of customer reviews”** published in [*Expert Systems with Applications*](https://www.sciencedirect.com/science/article/pii/S0957417424013150) (2024).

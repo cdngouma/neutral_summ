@@ -1,7 +1,9 @@
 ## Summary
 
-This repository contains an early prototype developed during work on the paper **“Objective and neutral summarization of customer reviews”** published in [*Expert Systems with Applications*](https://www.sciencedirect.com/science/article/pii/S0957417424013150) (2024).
+This repository contains the research prototype developed during the early stages of the work that led to the paper [**“Objective and Neutral Summarization of Customer Reviews”**](https://www.sciencedirect.com/science/article/pii/S0957417424013150), published in *Expert Systems with Applications* (2024).
 
-The project explores objective review summarization using an adversarial multi-task learning framework designed to separate factual content from sentiment-heavy or overly subjective language. The approach combines an unsupervised autoencoder with adversarial training to encourage more neutral summaries.
+Customer reviews often combine factual observations with highly subjective opinions, making it difficult to extract actionable feedback. This project explores an adversarial multi-task learning approach that separates factual content from sentiment-driven language to generate more objective summaries.
 
-This repository reflects a pre-release research implementation used during development and experimentation. It is **not** the final publication repository and may differ from the version used in the final paper submission and release.
+The proposed framework combines an unsupervised autoencoder with adversarial training to encourage representations that preserve informative content while reducing sentiment bias.
+
+This repository reflects the experimental implementation used during research and is **not** the final publication repository. It is preserved to document the methodology and development process that ultimately led to the published work.
